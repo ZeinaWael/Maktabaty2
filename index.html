@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="Maktabaty - مكتبتي | A premium digital book library system by Amna Bint Al-Arqam Al-Makhzumiya Secondary School for Girls">
+    <title>Maktabaty | مكتبتي</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Noto+Kufi+Arabic:wght@300;400;500;600;700;800;900&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="ambient-bg" id="ambientBg">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+        <div class="orb orb-4"></div>
+    </div>
+    <canvas id="particleCanvas"></canvas>
+
+    <!-- School Header -->
+    <header class="school-header" id="schoolHeader">
+        <div class="school-header-inner">
+            <div class="school-name">
+                <h2 class="school-name-ar">مدرسة آمنة بنت الأرقم المخزومية الثانوية للبنات</h2>
+                <p class="school-name-en">Amna Bint Al-Arqam Al-Makhzumiya Secondary School for Girls</p>
+                <p class="school-motto">متعلم ريادي لتنمية مستدامة &nbsp;·&nbsp; Academic Year 2025–26</p>
+            </div>
+            <div class="header-logo-center">
+                <div class="header-logo-wrap">
+                    <img src="schoolLogo.png" alt="School Logo" class="header-school-logo">
+                </div>
+            </div>
+            <div class="qatar-ministry">
+                <p class="ministry-ar">وزارة التربية والتعليم والتعليم العالي</p>
+                <p class="ministry-en">Ministry of Education and Higher Education</p>
+                <p class="ministry-state">State of Qatar · دولة قطر</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="navbar" id="navbar">
+        <div class="nav-inner">
+            <a href="#" class="nav-brand" id="navBrand">
+                <span class="brand-icon"> </span>
+                <span class="brand-text" data-en="Maktabaty" data-ar="مكتبتي">Maktabaty</span>
+            </a>
+            <div class="nav-links">
+                <a href="#" class="nav-link active" data-page="library" data-en="Library" data-ar="المكتبة">
+                    <span class="material-icons-round">local_library</span>
+                    <span data-en="Library" data-ar="المكتبة">Library</span>
+                </a>
+                <a href="#" class="nav-link" data-page="categories" data-en="Categories" data-ar="التصنيفات">
+                    <span class="material-icons-round">category</span>
+                    <span data-en="Categories" data-ar="التصنيفات">Categories</span>
+                </a>
+                <a href="#" class="nav-link" data-page="favorites" data-en="Favorites" data-ar="المفضلة">
+                    <span class="material-icons-round">favorite</span>
+                    <span data-en="Favorites" data-ar="المفضلة">Favorites</span>
+                </a>
+                <a href="#" class="nav-link" data-page="admin" data-en="Admin" data-ar="الإدارة">
+                    <span class="material-icons-round">admin_panel_settings</span>
+                    <span data-en="Admin" data-ar="الإدارة">Admin</span>
+                </a>
+            </div>
+            <div class="nav-controls">
+                <button class="control-btn" id="searchToggle" title="Search">
+                    <span class="material-icons-round">search</span>
+                </button>
+                <button class="control-btn" id="themeToggle" title="Toggle Theme">
+                    <span class="material-icons-round" id="themeIcon">light_mode</span>
+                </button>
+                <button class="control-btn" id="langToggle" title="Toggle Language">
+                    <span id="langLabel">عربي</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Search Overlay -->
+    <div class="search-overlay" id="searchOverlay">
+        <div class="search-container">
+            <div class="search-box">
+                <span class="material-icons-round search-icon">search</span>
+                <input type="text" id="searchInput" data-placeholder-en="Search books, authors..."
+                    data-placeholder-ar="ابحث عن كتب، مؤلفين..." placeholder="Search books, authors...">
+                <button class="search-close" id="searchClose"><span class="material-icons-round">close</span></button>
+            </div>
+            <div class="search-results" id="searchResults"></div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+        <!-- Library Page -->
+        <section class="page active" id="libraryPage">
+            <div class="hero-section">
+                <div class="hero-content">
+                    <h1 class="hero-title" data-en="Welcome To Amna School Virtual Library"
+                        data-ar="مرحبًا بكم في مكتبة مدرسة آمنة الافتراضية">Welcome to Amna School Virtual Library</h1>
+                    <p class="hero-subtitle"
+                        data-en="Your gateway to knowledge and lifelong learning, where we provide diverse digital resources that support our students, foster a love of reading, and encourage exploration, creativity, and a future built on learning."
+                        data-ar="نافذتكم إلى عالم المعرفة والتعلّم المستدام، حيث نوفر مصادر رقمية متنوعة تدعم طلابنا، وتنمّي حب القراءة، وتشجع على الاستكشاف والإبداع وبناء مستقبل قائم على العلم.">
+                        Your gateway to knowledge and lifelong learning, where we provide diverse digital resources that
+                        support our students, foster a love of reading, and encourage exploration, creativity, and a
+                        future built on learning.</p>
+                    <div class="hero-stats">
+                        <div class="stat-item"><span class="stat-number" id="totalBooks">0</span><span
+                                class="stat-label" data-en="Books" data-ar="كتاب">Books</span></div>
+                        <div class="stat-item"><span class="stat-number" id="totalCategories">0</span><span
+                                class="stat-label" data-en="Categories" data-ar="تصنيف">Categories</span></div>
+                        <div class="stat-item"><span class="stat-number" id="totalAuthors">0</span><span
+                                class="stat-label" data-en="Authors" data-ar="مؤلف">Authors</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="filter-bar">
+                <div class="filter-chips" id="filterChips">
+                    <button class="chip active" data-filter="all" data-en="All" data-ar="الكل">All</button>
+                    <button class="chip" data-filter="fiction" data-en="Fiction" data-ar="روايات">Fiction</button>
+                    <button class="chip" data-filter="science" data-en="Science" data-ar="علوم">Science</button>
+                    <button class="chip" data-filter="history" data-en="History" data-ar="تاريخ">History</button>
+                    <button class="chip" data-filter="poetry" data-en="Poetry" data-ar="شعر">Poetry</button>
+                    <button class="chip" data-filter="religion" data-en="Religion" data-ar="دين">Religion</button>
+                    <button class="chip" data-filter="philosophy" data-en="Philosophy"
+                        data-ar="فلسفة">Philosophy</button>
+                </div>
+                <div class="view-toggle">
+                    <button class="view-btn active" id="gridView"><span
+                            class="material-icons-round">grid_view</span></button>
+                    <button class="view-btn" id="listView"><span class="material-icons-round">view_list</span></button>
+                </div>
+            </div>
+            <div class="books-grid" id="booksGrid"></div>
+        </section>
+
+        <!-- Categories Page -->
+        <section class="page" id="categoriesPage">
+            <h2 class="section-title" data-en="Browse Categories" data-ar="تصفح التصنيفات">Browse Categories</h2>
+            <div class="categories-grid" id="categoriesGrid"></div>
+        </section>
+
+        <!-- Favorites Page -->
+        <section class="page" id="favoritesPage">
+            <h2 class="section-title" data-en="Your Favorites" data-ar="المفضلة لديك">Your Favorites</h2>
+            <div class="books-grid" id="favoritesGrid"></div>
+            <div class="empty-state" id="emptyFavorites" style="display:none;">
+                <span class="material-icons-round empty-icon">favorite_border</span>
+                <p data-en="No favorites yet. Start adding books!" data-ar="لا توجد مفضلات بعد. ابدأ بإضافة كتب!">No
+                    favorites yet. Start adding books!</p>
+            </div>
+        </section>
+
+        <!-- Admin Page -->
+        <section class="page" id="adminPage">
+            <div class="admin-login" id="adminLogin">
+                <div class="login-card">
+                    <div class="login-header">
+                        <span class="material-icons-round login-icon">lock</span>
+                        <h2 data-en="Admin Login" data-ar="تسجيل دخول المدير">Admin Login</h2>
+                        <p data-en="Enter your credentials to access the dashboard"
+                            data-ar="أدخل بيانات الاعتماد للوصول إلى لوحة التحكم">Enter your credentials to access the
+                            dashboard</p>
+                    </div>
+                    <form id="loginForm">
+                        <div class="input-group">
+                            <span class="material-icons-round input-icon">person</span>
+                            <input type="text" id="loginUsername" placeholder="Username" required>
+                        </div>
+                        <div class="input-group">
+                            <span class="material-icons-round input-icon">lock</span>
+                            <input type="password" id="loginPassword" placeholder="Password" required>
+                            <button type="button" class="password-toggle" id="passwordToggle">
+                                <span class="material-icons-round">visibility</span>
+                            </button>
+                        </div>
+                        <div class="login-error" id="loginError" style="display:none;">
+                            <span class="material-icons-round">error</span>
+                            <span data-en="Invalid credentials" data-ar="بيانات اعتماد غير صالحة">Invalid
+                                credentials</span>
+                        </div>
+                        <button type="submit" class="btn-primary login-btn" data-en="Sign In"
+                            data-ar="تسجيل الدخول">Sign In</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="admin-dashboard" id="adminDashboard" style="display:none;">
+                <div class="dashboard-header">
+                    <div class="dashboard-welcome">
+                        <h2 data-en="Welcome, Asma Ragab" data-ar="مرحباً، أسماء رجب">Welcome, Asma Ragab</h2>
+                        <p data-en="Manage your book library" data-ar="إدارة مكتبتك">Manage your book library</p>
+                    </div>
+                    <div class="dashboard-actions">
+                        <button class="btn-primary" id="addBookBtn">
+                            <span class="material-icons-round">add</span>
+                            <span data-en="Add Book" data-ar="إضافة كتاب">Add Book</span>
+                        </button>
+                        <button class="btn-accent" id="addCategoryBtn">
+                            <span class="material-icons-round">create_new_folder</span>
+                            <span data-en="Add Category" data-ar="إضافة تصنيف">Add Category</span>
+                        </button>
+                        <button class="btn-outline" id="logoutBtn">
+                            <span class="material-icons-round">logout</span>
+                            <span data-en="Logout" data-ar="تسجيل الخروج">Logout</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="dashboard-stats">
+                    <div class="dash-stat-card"><span class="material-icons-round">menu_book</span>
+                        <div><span class="dash-stat-num" id="dashTotalBooks">0</span><span class="dash-stat-label"
+                                data-en="Total Books" data-ar="إجمالي الكتب">Total Books</span></div>
+                    </div>
+                    <div class="dash-stat-card"><span class="material-icons-round">category</span>
+                        <div><span class="dash-stat-num" id="dashTotalCats">0</span><span class="dash-stat-label"
+                                data-en="Categories" data-ar="التصنيفات">Categories</span></div>
+                    </div>
+                    <div class="dash-stat-card"><span class="material-icons-round">picture_as_pdf</span>
+                        <div><span class="dash-stat-num" id="dashTotalPdfs">0</span><span class="dash-stat-label"
+                                data-en="PDFs Uploaded" data-ar="ملفات PDF">PDFs Uploaded</span></div>
+                    </div>
+                    <div class="dash-stat-card"><span class="material-icons-round">star</span>
+                        <div><span class="dash-stat-num" id="dashAvgRating">0</span><span class="dash-stat-label"
+                                data-en="Avg Rating" data-ar="متوسط التقييم">Avg Rating</span></div>
+                    </div>
+                </div>
+
+                <!-- Category Management Section -->
+                <div class="admin-categories-section">
+                    <div class="admin-categories-header">
+                        <h3 data-en="Manage Categories" data-ar="إدارة التصنيفات">Manage Categories</h3>
+                        <span class="admin-categories-count" id="adminCatCount">0</span>
+                    </div>
+                    <div class="admin-categories-grid" id="adminCategoriesGrid"></div>
+                </div>
+
+                <div class="admin-table-container">
+                    <div class="table-header">
+                        <h3 data-en="All Books" data-ar="جميع الكتب">All Books</h3>
+                        <div class="table-search">
+                            <span class="material-icons-round">search</span>
+                            <input type="text" id="adminSearch" placeholder="Search books...">
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="admin-table" id="adminTable">
+                            <thead>
+                                <tr>
+                                    <th>Cover</th>
+                                    <th>Title</th>
+                                    <th>Author</th>
+                                    <th>Category</th>
+                                    <th>PDF</th>
+                                    <th>Rating</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ===== PDF READER MODAL ===== -->
+    <div class="reader-overlay" id="readerOverlay">
+        <div class="reader-container">
+            <div class="reader-header">
+                <div class="reader-info">
+                    <h3 id="readerTitle"></h3>
+                    <span id="readerAuthor"></span>
+                </div>
+                <div class="reader-controls">
+                    <button class="reader-btn" id="zoomOut" title="Zoom Out"><span
+                            class="material-icons-round">zoom_out</span></button>
+                    <span class="zoom-label" id="zoomLabel">100%</span>
+                    <button class="reader-btn" id="zoomIn" title="Zoom In"><span
+                            class="material-icons-round">zoom_in</span></button>
+                    <button class="reader-btn" id="readerThemeToggle" title="Toggle Theme"><span
+                            class="material-icons-round">contrast</span></button>
+                    <button class="reader-btn" id="downloadPdfBtn" title="Download PDF"><span
+                            class="material-icons-round">download</span></button>
+                    <button class="reader-btn reader-close-btn" id="readerClose"><span
+                            class="material-icons-round">close</span></button>
+                </div>
+            </div>
+            <div class="reader-progress-bar">
+                <div class="reader-progress" id="readerProgress"></div>
+            </div>
+            <div class="reader-body" id="readerBody">
+                <!-- PDF mode -->
+                <div class="pdf-viewer" id="pdfViewer" style="display:none;">
+                    <canvas id="pdfCanvas"></canvas>
+                </div>
+                <!-- Chapter text mode -->
+                <div class="reader-page" id="readerPage"></div>
+                <!-- Loading state -->
+                <div class="pdf-loading" id="pdfLoading" style="display:none;">
+                    <div class="pdf-spinner"></div>
+                    <p data-en="Loading PDF..." data-ar="جاري تحميل PDF...">Loading PDF...</p>
+                </div>
+            </div>
+            <div class="reader-footer">
+                <button class="reader-nav-btn" id="prevPage">
+                    <span class="material-icons-round">chevron_left</span>
+                    <span data-en="Previous" data-ar="السابق">Previous</span>
+                </button>
+                <div class="page-nav-group">
+                    <span class="page-indicator" id="pageIndicator">1 / 1</span>
+                    <div class="page-jump" id="pageJump">
+                        <input type="number" id="pageJumpInput" min="1" value="1">
+                        <button id="pageJumpBtn"><span class="material-icons-round">arrow_forward</span></button>
+                    </div>
+                </div>
+                <button class="reader-nav-btn" id="nextPage">
+                    <span data-en="Next" data-ar="التالي">Next</span>
+                    <span class="material-icons-round">chevron_right</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Book Detail Modal -->
+    <div class="modal-overlay" id="bookDetailModal">
+        <div class="modal-container book-detail-container">
+            <button class="modal-close" id="detailClose"><span class="material-icons-round">close</span></button>
+            <div class="book-detail-content">
+                <div class="book-detail-cover" id="detailCover"></div>
+                <div class="book-detail-info">
+                    <h2 id="detailTitle"></h2>
+                    <p class="detail-author" id="detailAuthor"></p>
+                    <p class="detail-author-desc" id="detailAuthorDesc"></p>
+                    <div class="detail-rating" id="detailRating"></div>
+                    <p class="detail-category" id="detailCategory"></p>
+                    <p class="detail-description" id="detailDescription"></p>
+                    <div class="detail-meta">
+                        <div class="meta-item"><span class="material-icons-round">calendar_today</span><span
+                                id="detailYear"></span></div>
+                        <div class="meta-item"><span class="material-icons-round">auto_stories</span><span
+                                id="detailPages"></span></div>
+                        <div class="meta-item"><span class="material-icons-round">language</span><span
+                                id="detailLang"></span></div>
+                        <div class="meta-item" id="detailPdfBadge" style="display:none;"><span
+                                class="material-icons-round">picture_as_pdf</span><span>PDF Available</span></div>
+                    </div>
+                    <div class="detail-actions">
+                        <button class="btn-primary" id="detailReadBtn">
+                            <span class="material-icons-round">menu_book</span>
+                            <span data-en="Read Now" data-ar="اقرأ الآن">Read Now</span>
+                        </button>
+                        <button class="btn-outline" id="detailFavBtn">
+                            <span class="material-icons-round" id="detailFavIcon">favorite_border</span>
+                            <span data-en="Favorite" data-ar="مفضل">Favorite</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Book Modal -->
+    <div class="modal-overlay" id="bookFormModal">
+        <div class="modal-container form-container">
+            <button class="modal-close" id="formClose"><span class="material-icons-round">close</span></button>
+            <h2 id="formTitle">Add New Book</h2>
+            <form id="bookForm">
+                <input type="hidden" id="editBookId">
+                <div class="form-row">
+                    <div class="form-group"><label>Title (English)</label><input type="text" id="bookTitleEn" required>
+                    </div>
+                    <div class="form-group"><label>Title (Arabic)</label><input type="text" id="bookTitleAr" dir="rtl">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Author (English)</label><input type="text" id="bookAuthorEn"
+                            required></div>
+                    <div class="form-group"><label>Author (Arabic)</label><input type="text" id="bookAuthorAr"
+                            dir="rtl"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Author Bio (English)</label><textarea id="bookAuthorDescEn" rows="2"
+                            placeholder="Brief biography of the author..."></textarea></div>
+                    <div class="form-group"><label>Author Bio (Arabic)</label><textarea id="bookAuthorDescAr" rows="2"
+                            dir="rtl" placeholder="نبذة مختصرة عن المؤلف..."></textarea></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="bookCategory" required>
+                            <option value="fiction">Fiction</option>
+                            <option value="science">Science</option>
+                            <option value="history">History</option>
+                            <option value="poetry">Poetry</option>
+                            <option value="religion">Religion</option>
+                            <option value="philosophy">Philosophy</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>Year</label><input type="number" id="bookYear" min="1000" max="2030">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Pages</label><input type="number" id="bookPages" min="1"></div>
+                    <div class="form-group"><label>Rating</label><input type="number" id="bookRating" min="1" max="5"
+                            step="0.1"></div>
+                </div>
+                <div class="form-group"><label>Description (English)</label><textarea id="bookDescEn"
+                        rows="3"></textarea></div>
+                <div class="form-group"><label>Description (Arabic)</label><textarea id="bookDescAr" rows="3"
+                        dir="rtl"></textarea></div>
+                <div class="form-group">
+                    <label><span class="material-icons-round"
+                            style="font-size:18px;vertical-align:middle;margin-right:4px;">wallpaper</span> Book
+                        Wallpaper URL</label>
+                    <input type="url" id="bookWallpaper" placeholder="https://images.unsplash.com/photo-...">
+                    <small style="color:var(--text-muted);margin-top:4px;display:block;">Optional background image URL
+                        for the book cover</small>
+                </div>
+                <div class="form-group">
+                    <label>Cover Color</label>
+                    <div class="color-picker-row">
+                        <input type="color" id="bookColor" value="#8B1A3A">
+                        <div class="preset-colors">
+                            <button type="button" class="color-preset" data-color="#8B1A3A"
+                                style="background:#8B1A3A"></button>
+                            <button type="button" class="color-preset" data-color="#6B1429"
+                                style="background:#6B1429"></button>
+                            <button type="button" class="color-preset" data-color="#2c5f7c"
+                                style="background:#2c5f7c"></button>
+                            <button type="button" class="color-preset" data-color="#6b3a5d"
+                                style="background:#6b3a5d"></button>
+                            <button type="button" class="color-preset" data-color="#4a7c59"
+                                style="background:#4a7c59"></button>
+                            <button type="button" class="color-preset" data-color="#8B4513"
+                                style="background:#8B4513"></button>
+                            <button type="button" class="color-preset" data-color="#1a1a2e"
+                                style="background:#1a1a2e"></button>
+                            <button type="button" class="color-preset" data-color="#c44536"
+                                style="background:#c44536"></button>
+                        </div>
+                    </div>
+                </div>
+                <!-- PDF Upload Section -->
+                <div class="form-group pdf-upload-group">
+                    <label>
+                        <span class="material-icons-round">picture_as_pdf</span>
+                        Upload PDF Book File
+                    </label>
+                    <div class="pdf-drop-zone" id="pdfDropZone">
+                        <span class="material-icons-round pdf-drop-icon">upload_file</span>
+                        <p id="pdfDropText">Drag & drop a PDF here, or click to browse</p>
+                        <p class="pdf-drop-hint">Supports PDF files up to 50MB</p>
+                        <input type="file" id="bookPdfFile" accept=".pdf" style="display:none;">
+                    </div>
+                    <div class="pdf-file-info" id="pdfFileInfo" style="display:none;">
+                        <span class="material-icons-round">check_circle</span>
+                        <span id="pdfFileName"></span>
+                        <button type="button" id="removePdfBtn" class="remove-pdf-btn">
+                            <span class="material-icons-round">close</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-outline" id="formCancel">Cancel</button>
+                    <button type="submit" class="btn-primary" id="formSubmit">Add Book</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Modal -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal-container delete-container">
+            <span class="material-icons-round delete-icon">warning</span>
+            <h3 data-en="Delete Book?" data-ar="حذف الكتاب؟">Delete Book?</h3>
+            <p data-en="This action cannot be undone." data-ar="لا يمكن التراجع عن هذا الإجراء.">This action cannot be
+                undone.</p>
+            <div class="delete-actions">
+                <button class="btn-outline" id="deleteCancelBtn">Cancel</button>
+                <button class="btn-danger" id="deleteConfirmBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Category Modal -->
+    <div class="modal-overlay" id="categoryFormModal">
+        <div class="modal-container category-form-container">
+            <button class="modal-close" id="categoryFormClose"><span class="material-icons-round">close</span></button>
+            <div class="category-form-header">
+                <span class="material-icons-round category-form-icon">create_new_folder</span>
+                <h2 data-en="Add New Category" data-ar="إضافة تصنيف جديد">Add New Category</h2>
+                <p data-en="Create a custom category for your book collection"
+                    data-ar="أنشئ تصنيفاً مخصصاً لمجموعة كتبك">Create a custom category for your book collection</p>
+            </div>
+            <form id="categoryForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label data-en="Category Name (English)" data-ar="اسم التصنيف (إنجليزي)">Category Name
+                            (English)</label>
+                        <input type="text" id="catNameEn" placeholder="e.g. Technology" required>
+                    </div>
+                    <div class="form-group">
+                        <label data-en="Category Name (Arabic)" data-ar="اسم التصنيف (عربي)">Category Name
+                            (Arabic)</label>
+                        <input type="text" id="catNameAr" dir="rtl" placeholder="مثال: تكنولوجيا">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label data-en="Category Icon" data-ar="أيقونة التصنيف">Category Icon</label>
+                    <div class="icon-picker-grid" id="iconPickerGrid">
+                        <button type="button" class="icon-pick active" data-icon="📚">📚</button>
+                        <button type="button" class="icon-pick" data-icon="🔬">🔬</button>
+                        <button type="button" class="icon-pick" data-icon="📖">📖</button>
+                        <button type="button" class="icon-pick" data-icon="🏛️">🏛️</button>
+                        <button type="button" class="icon-pick" data-icon="✨">✨</button>
+                        <button type="button" class="icon-pick" data-icon="🕌">🕌</button>
+                        <button type="button" class="icon-pick" data-icon="💭">💭</button>
+                        <button type="button" class="icon-pick" data-icon="🎨">🎨</button>
+                        <button type="button" class="icon-pick" data-icon="🌍">🌍</button>
+                        <button type="button" class="icon-pick" data-icon="💻">💻</button>
+                        <button type="button" class="icon-pick" data-icon="⚖️">⚖️</button>
+                        <button type="button" class="icon-pick" data-icon="🧠">🧠</button>
+                        <button type="button" class="icon-pick" data-icon="🎭">🎭</button>
+                        <button type="button" class="icon-pick" data-icon="🏆">🏆</button>
+                        <button type="button" class="icon-pick" data-icon="📐">📐</button>
+                        <button type="button" class="icon-pick" data-icon="🌿">🌿</button>
+                        <button type="button" class="icon-pick" data-icon="🎵">🎵</button>
+                        <button type="button" class="icon-pick" data-icon="❤️">❤️</button>
+                        <button type="button" class="icon-pick" data-icon="🗺️">🗺️</button>
+                        <button type="button" class="icon-pick" data-icon="🔮">🔮</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label data-en="Category Color" data-ar="لون التصنيف">Category Color</label>
+                    <div class="color-picker-row">
+                        <input type="color" id="catColor" value="#2c7a5c">
+                        <div class="preset-colors" id="catPresetColors">
+                            <button type="button" class="color-preset" data-color="#2c7a5c"
+                                style="background:#2c7a5c"></button>
+                            <button type="button" class="color-preset" data-color="#c44536"
+                                style="background:#c44536"></button>
+                            <button type="button" class="color-preset" data-color="#2c5f7c"
+                                style="background:#2c5f7c"></button>
+                            <button type="button" class="color-preset" data-color="#8B4513"
+                                style="background:#8B4513"></button>
+                            <button type="button" class="color-preset" data-color="#6b3a5d"
+                                style="background:#6b3a5d"></button>
+                            <button type="button" class="color-preset" data-color="#1a5c3a"
+                                style="background:#1a5c3a"></button>
+                            <button type="button" class="color-preset" data-color="#e67e22"
+                                style="background:#e67e22"></button>
+                            <button type="button" class="color-preset" data-color="#8B1A3A"
+                                style="background:#8B1A3A"></button>
+                        </div>
+                    </div>
+                </div>
+                <div class="category-preview-box">
+                    <span data-en="Preview" data-ar="معاينة">Preview</span>
+                    <div class="category-preview-card" id="categoryPreview">
+                        <div class="category-icon" id="catPreviewIcon" style="background:#2c7a5c20;color:#2c7a5c">📚
+                        </div>
+                        <div class="category-info">
+                            <h3 id="catPreviewName">Category Name</h3>
+                            <p>0 books</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-outline" id="categoryFormCancel" data-en="Cancel"
+                        data-ar="إلغاء">Cancel</button>
+                    <button type="submit" class="btn-primary" id="categoryFormSubmit" data-en="Add Category"
+                        data-ar="إضافة تصنيف">Add Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Category Modal -->
+    <div class="modal-overlay" id="deleteCategoryModal">
+        <div class="modal-container delete-container">
+            <span class="material-icons-round delete-icon">warning</span>
+            <h3 data-en="Delete Category?" data-ar="حذف التصنيف؟">Delete Category?</h3>
+            <p data-en="Books in this category will be moved to 'Uncategorized'."
+                data-ar="سيتم نقل الكتب في هذا التصنيف إلى 'غير مصنف'.">Books in this category will be moved to
+                'Uncategorized'.</p>
+            <div class="delete-actions">
+                <button class="btn-outline" id="deleteCatCancelBtn">Cancel</button>
+                <button class="btn-danger" id="deleteCatConfirmBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-brand"><span> </span><span data-en="Maktabaty" data-ar="مكتبتي">Maktabaty</span></div>
+            <p class="footer-school" data-en="Amna Bint Al-Arqam Al-Makhzumiya Secondary School for Girls"
+                data-ar="مدرسة أمنة بنت الأرقم المخزومية الثانوية للبنات">Amna Bint Al-Arqam Al-Makhzumiya Secondary
+                School for Girls</p>
+            <p class="footer-copy">© 2026 Zeina Wael. All rights reserved.</p>
+            <a></a>
+        </div>
+    </footer>
+
+    <!-- PDF.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
