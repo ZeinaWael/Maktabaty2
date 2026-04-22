@@ -20,9 +20,12 @@ create table if not exists books (
   desc_ar     text,
   color       text default '#8B1A3A',
   wallpaper   text,
+  pdf_url     text,
   has_pdf     boolean default false,
   created_at  timestamptz default now()
 );
+
+alter table books add column if not exists pdf_url text;
 
 -- ---- Categories table --------------------------------------
 create table if not exists categories (
