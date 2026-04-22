@@ -172,7 +172,7 @@ Amna Virtual School Library" data-ar="آمنة تقرأ
                     <form id="loginForm">
                         <div class="input-group">
                             <span class="material-icons-round input-icon">person</span>
-                            <input type="text" id="loginUsername" placeholder="Username" required>
+                            <input type="email" id="loginEmail" placeholder="Admin email" required>
                         </div>
                         <div class="input-group">
                             <span class="material-icons-round input-icon">lock</span>
@@ -195,7 +195,7 @@ Amna Virtual School Library" data-ar="آمنة تقرأ
             <div class="admin-dashboard" id="adminDashboard" style="display:none;">
                 <div class="dashboard-header">
                     <div class="dashboard-welcome">
-                        <h2 data-en="Welcome, Asma Ragab" data-ar="مرحباً، أسماء رجب">Welcome, Asma Ragab</h2>
+                        <h2 id="adminWelcomeTitle" data-en="Welcome" data-ar="مرحباً">Welcome</h2>
                         <p data-en="Manage your book library" data-ar="إدارة مكتبتك">Manage your book library</p>
                     </div>
                     <div class="dashboard-actions">
@@ -481,6 +481,8 @@ Amna Virtual School Library" data-ar="آمنة تقرأ
                             <span class="material-icons-round">close</span>
                         </button>
                     </div>
+                    <div class="pdf-current-state" id="pdfCurrentState" style="display:none;"></div>
+                    <button type="button" class="btn-outline pdf-clear-btn" id="clearPdfBtn" style="display:none;">Remove Current PDF</button>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn-outline" id="formCancel">Cancel</button>
@@ -602,9 +604,9 @@ Amna Virtual School Library" data-ar="آمنة تقرأ
         <div class="modal-container delete-container">
             <span class="material-icons-round delete-icon">warning</span>
             <h3 data-en="Delete Category?" data-ar="حذف التصنيف؟">Delete Category?</h3>
-            <p data-en="Books in this category will be moved to 'Uncategorized'."
-                data-ar="سيتم نقل الكتب في هذا التصنيف إلى 'غير مصنف'.">Books in this category will be moved to
-                'Uncategorized'.</p>
+            <p data-en="Books in this category will be moved to Fiction."
+                data-ar="سيتم نقل الكتب في هذا التصنيف إلى الروايات.">Books in this category will be moved to
+                Fiction.</p>
             <div class="delete-actions">
                 <button class="btn-outline" id="deleteCatCancelBtn">Cancel</button>
                 <button class="btn-danger" id="deleteCatConfirmBtn">Delete</button>
@@ -627,6 +629,7 @@ Amna Virtual School Library" data-ar="آمنة تقرأ
 
     <!-- PDF.js CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
 </body>
 
