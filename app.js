@@ -2,6 +2,15 @@
 
 const SUPABASE_URL = 'https://unjbytljocengnbedpwr.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVuamJ5dGxqb2NlbmduYmVkcHdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3Njg1MjEsImV4cCI6MjA5MjM0NDUyMX0.2uf83L6YyWx7MUQufTU38HmmFuFhNl0YJ6fD0C2TZ-E';
+const supabase = window.supabase?.createClient
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    })
+  : null;
 // ----- BOOK DATA -----
 const defaultBooks = [
   {
@@ -311,6 +320,7 @@ let favorites = JSON.parse(localStorage.getItem('maktabaty_favorites')) || [];
 let currentLang = localStorage.getItem('maktabaty_lang') || 'en';
 let currentTheme = localStorage.getItem('maktabaty_theme') || 'dark';
 let isAdminLoggedIn = false;
+let currentAdminUser = null;
 let currentPage = 'library';
 let deleteTargetId = null;
 let deleteCategoryTargetId = null;
@@ -348,26 +358,51 @@ let pendingPdfPage = null;
 // Pending PDF file for form
 let pendingPdfFile = null;
 let pendingPdfDataUrl = null;
+let removeExistingPdf = false;
 
 function isRemotePdfUrl(value) {
   return typeof value === 'string' && /^https?:\/\//i.test(value);
+}
+
+function isSupabaseStorageUrl(value) {
+  return typeof value === 'string' && value.includes('/storage/v1/object/public/books/');
+}
+
+function inferStoragePathFromUrl(value) {
+  if (!isSupabaseStorageUrl(value)) return null;
+  const marker = '/storage/v1/object/public/books/';
+  const start = value.indexOf(marker);
+  if (start === -1) return null;
+  return decodeURIComponent(value.slice(start + marker.length));
+}
+
+function buildStorageObjectPath(bookId) {
+  return `${bookId}.pdf`;
+}
+
+function getPublicStorageUrl(storagePath) {
+  return `${SUPABASE_URL}/storage/v1/object/public/books/${storagePath}`;
 }
 
 function getPublishedPdfUrl(value) {
   return isRemotePdfUrl(value) ? value : null;
 }
 
-function getSupabaseHeaders(extraHeaders) {
-  return {
-    'apikey': SUPABASE_ANON,
-    'Authorization': `Bearer ${SUPABASE_ANON}`,
-    ...extraHeaders
-  };
+async function getSupabaseAccessToken() {
+  if (!supabase) return SUPABASE_ANON;
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  return data?.session?.access_token || SUPABASE_ANON;
 }
 
 async function supabaseRequest(path, options) {
   const requestOptions = options || {};
-  const headers = getSupabaseHeaders(requestOptions.headers || {});
+  const accessToken = await getSupabaseAccessToken();
+  const headers = {
+    'apikey': SUPABASE_ANON,
+    'Authorization': `Bearer ${accessToken}`,
+    ...(requestOptions.headers || {})
+  };
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...requestOptions,
     headers
@@ -399,6 +434,7 @@ function mapSupabaseRowToBook(b) {
     color: b.color || '#8B1A3A',
     wallpaper: b.wallpaper || null,
     pdfData: b.pdf_url || (b.has_pdf ? `${SUPABASE_URL}/storage/v1/object/public/books/${b.id}.pdf` : null),
+    storagePath: b.storage_path || inferStoragePathFromUrl(b.pdf_url),
     content: [{
       titleEn: 'Chapter 1', titleAr: 'الفصل الأول',
       textEn: 'Open PDF to read.', textAr: 'افتح PDF للقراءة.'
@@ -408,6 +444,7 @@ function mapSupabaseRowToBook(b) {
 
 function mapBookToSupabaseRow(book) {
   const publishedPdfUrl = getPublishedPdfUrl(book.pdfData);
+  const storagePath = inferStoragePathFromUrl(publishedPdfUrl);
 
   return {
     title_en: book.titleEn,
@@ -425,7 +462,8 @@ function mapBookToSupabaseRow(book) {
     color: book.color,
     wallpaper: book.wallpaper,
     has_pdf: !!publishedPdfUrl,
-    pdf_url: publishedPdfUrl
+    pdf_url: publishedPdfUrl,
+    storage_path: storagePath
   };
 }
 
@@ -464,6 +502,116 @@ async function deleteBookInSupabase(id) {
   });
 }
 
+async function syncBookPdfInSupabase(id, pdfUrl, storagePath) {
+  const rows = await supabaseRequest(`books?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    },
+    body: JSON.stringify({
+      has_pdf: !!pdfUrl,
+      pdf_url: pdfUrl || null,
+      storage_path: storagePath || null
+    })
+  });
+
+  return rows && rows[0] ? mapSupabaseRowToBook(rows[0]) : null;
+}
+
+async function uploadPdfToSupabase(bookId, file) {
+  const accessToken = await getSupabaseAccessToken();
+  const storagePath = buildStorageObjectPath(bookId);
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/books/${storagePath}`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/pdf',
+      'x-upsert': 'true'
+    },
+    body: file
+  });
+
+  if (!res.ok) {
+    throw new Error(await res.text() || 'PDF upload failed');
+  }
+
+  return {
+    storagePath,
+    pdfUrl: getPublicStorageUrl(storagePath)
+  };
+}
+
+async function deletePdfFromSupabase(storagePath) {
+  if (!storagePath) return;
+  const accessToken = await getSupabaseAccessToken();
+  const encodedPath = storagePath.split('/').map(encodeURIComponent).join('/');
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/books/${encodedPath}`, {
+    method: 'DELETE',
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${accessToken}`
+    }
+  });
+
+  if (!res.ok && res.status !== 404) {
+    throw new Error(await res.text() || 'PDF delete failed');
+  }
+}
+
+function mapSupabaseCategoryRow(row) {
+  return {
+    id: row.slug || `category-${row.id}`,
+    dbId: row.id,
+    en: row.name_en,
+    ar: row.name_ar || row.name_en,
+    icon: row.icon || '📚',
+    color: row.color || '#2c7a5c'
+  };
+}
+
+async function createCategoryInSupabase(category) {
+  const rows = await supabaseRequest('categories', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    },
+    body: JSON.stringify({
+      slug: category.id,
+      name_en: category.en,
+      name_ar: category.ar,
+      icon: category.icon,
+      color: category.color
+    })
+  });
+
+  return rows && rows[0] ? mapSupabaseCategoryRow(rows[0]) : null;
+}
+
+async function deleteCategoryInSupabase(categoryId) {
+  await supabaseRequest(`categories?slug=eq.${encodeURIComponent(categoryId)}`, {
+    method: 'DELETE',
+    headers: {
+      'Prefer': 'return=minimal'
+    }
+  });
+}
+
+async function reassignBooksCategoryInSupabase(fromCategory, toCategory) {
+  const rows = await supabaseRequest(`books?category=eq.${encodeURIComponent(fromCategory)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    },
+    body: JSON.stringify({ category: toCategory })
+  });
+
+  return Array.isArray(rows) ? rows.map(mapSupabaseRowToBook) : [];
+}
+
 // Load books from Supabase
 async function loadBooks() {
   try {
@@ -476,6 +624,73 @@ async function loadBooks() {
   renderBooks();
   renderCategories();
   updateStats();
+}
+
+async function loadCustomCategories() {
+  try {
+    const data = await supabaseRequest('categories?order=name_en.asc&select=*');
+    customCategories = Array.isArray(data) ? data.map(mapSupabaseCategoryRow) : [];
+  } catch (err) {
+    console.error('Supabase categories load error:', err);
+    customCategories = [];
+  }
+  updateFilterChips();
+}
+
+async function setupAdminAuth() {
+  if (!supabase) {
+    showToast('Supabase client failed to load. Check the CDN script.', 'error');
+    return;
+  }
+
+  const applySession = session => {
+    currentAdminUser = session?.user || null;
+    isAdminLoggedIn = !!currentAdminUser;
+    updateAdminAuthUI();
+  };
+
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    console.error('Supabase auth session error:', error);
+  }
+  applySession(data?.session || null);
+
+  supabase.auth.onAuthStateChange((_event, session) => {
+    applySession(session);
+  });
+}
+
+function updateAdminWelcome() {
+  const title = document.getElementById('adminWelcomeTitle');
+  if (!title) return;
+
+  if (!currentAdminUser?.email) {
+    title.textContent = currentLang === 'ar' ? 'مرحباً' : 'Welcome';
+    return;
+  }
+
+  title.textContent = currentLang === 'ar'
+    ? `مرحباً، ${currentAdminUser.email}`
+    : `Welcome, ${currentAdminUser.email}`;
+}
+
+function updateAdminAuthUI() {
+  const loginPanel = document.getElementById('adminLogin');
+  const dashboard = document.getElementById('adminDashboard');
+  const errorBox = document.getElementById('loginError');
+
+  if (!loginPanel || !dashboard) return;
+
+  loginPanel.style.display = isAdminLoggedIn ? 'none' : 'flex';
+  dashboard.style.display = isAdminLoggedIn ? 'block' : 'none';
+  if (errorBox) errorBox.style.display = 'none';
+  updateAdminWelcome();
+
+  if (isAdminLoggedIn) {
+    renderAdminTable(document.getElementById('adminSearch')?.value || '');
+    updateDashboardStats();
+    renderAdminCategories();
+  }
 }
 // function loadBooks() {
 //   const stored = localStorage.getItem('maktabaty_books');
@@ -493,18 +708,14 @@ async function loadBooks() {
 // }
 
 // ----- INIT -----
-document.addEventListener('DOMContentLoaded', () => {
-  loadBooks();
-  loadCustomCategories();
+document.addEventListener('DOMContentLoaded', async () => {
   applyTheme(currentTheme);
   applyLanguage(currentLang);
-  renderBooks();
-  renderCategories();
-  updateStats();
   initParticles();
   initEventListeners();
-  animateCounters();
   setupPdfUpload();
+  await Promise.all([loadCustomCategories(), loadBooks(), setupAdminAuth()]);
+  animateCounters();
 });
 
 // ----- THEME -----
@@ -525,6 +736,7 @@ function applyLanguage(lang) {
   document.querySelectorAll('[data-en]').forEach(el => { el.textContent = isAr ? el.dataset.ar : el.dataset.en; });
   document.querySelectorAll('[data-placeholder-en]').forEach(el => { el.placeholder = isAr ? el.dataset.placeholderAr : el.dataset.placeholderEn; });
   localStorage.setItem('maktabaty_lang', lang);
+  updateAdminWelcome();
   renderBooks();
   renderCategories();
   renderFavorites();
@@ -584,6 +796,13 @@ function initEventListeners() {
   document.getElementById('formCancel').addEventListener('click', closeBookForm);
   document.getElementById('bookForm').addEventListener('submit', handleBookSubmit);
   document.getElementById('bookFormModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeBookForm(); });
+  document.getElementById('clearPdfBtn').addEventListener('click', markPdfForRemoval);
+  document.getElementById('bookPdfUrl').addEventListener('input', () => {
+    if (document.getElementById('bookPdfUrl').value.trim()) {
+      removeExistingPdf = false;
+    }
+    updatePdfFormState();
+  });
 
   document.querySelectorAll('.color-preset').forEach(btn => {
     btn.addEventListener('click', () => { document.getElementById('bookColor').value = btn.dataset.color; });
@@ -698,6 +917,7 @@ function setupPdfUpload() {
     fileInput.value = '';
     document.getElementById('pdfFileInfo').style.display = 'none';
     document.getElementById('pdfDropZone').style.display = 'flex';
+    updatePdfFormState();
   });
 }
 
@@ -707,13 +927,15 @@ function handlePdfFileSelect(file) {
     return;
   }
   pendingPdfFile = file;
+  removeExistingPdf = false;
   const reader = new FileReader();
   reader.onload = e => {
     pendingPdfDataUrl = e.target.result;
     document.getElementById('pdfFileName').textContent = file.name + ' (' + (file.size / 1024 / 1024).toFixed(1) + ' MB)';
     document.getElementById('pdfFileInfo').style.display = 'flex';
     document.getElementById('pdfDropZone').style.display = 'none';
-    showToast('PDF ready for local preview. Paste a hosted PDF URL to publish it on the website.', 'info');
+    updatePdfFormState();
+    showToast('PDF ready to upload to Supabase when you save the book.', 'info');
   };
   reader.readAsDataURL(file);
 }
@@ -774,14 +996,7 @@ function renderBooks(filter) {
 function renderCategories() {
   const grid = document.getElementById('categoriesGrid');
   const isAr = currentLang === 'ar';
-  const cats = [
-    { id: 'fiction', icon: '📖', color: '#2c5f7c', en: 'Fiction', ar: 'روايات' },
-    { id: 'science', icon: '🔬', color: '#4a7c59', en: 'Science', ar: 'علوم' },
-    { id: 'history', icon: '🏛️', color: '#8B4513', en: 'History', ar: 'تاريخ' },
-    { id: 'poetry', icon: '✨', color: '#8B1A3A', en: 'Poetry', ar: 'شعر' },
-    { id: 'religion', icon: '🕌', color: '#1a5c3a', en: 'Religion', ar: 'دين' },
-    { id: 'philosophy', icon: '💭', color: '#6b3a5d', en: 'Philosophy', ar: 'فلسفة' },
-  ];
+  const cats = getAllCategories();
 
   grid.innerHTML = cats.map((cat, i) => {
     const count = books.filter(b => b.category === cat.id).length;
@@ -1102,30 +1317,48 @@ function closeReader() {
 }
 
 // ----- ADMIN LOGIN -----
-function handleLogin(e) {
+async function handleLogin(e) {
   e.preventDefault();
-  const username = document.getElementById('loginUsername').value;
+  const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
+  const loginError = document.getElementById('loginError');
+  const submitBtn = document.querySelector('#loginForm .login-btn');
 
-  if (username === 'Asma Ragab' && password === 'Asma@1981') {
-    isAdminLoggedIn = true;
-    document.getElementById('adminLogin').style.display = 'none';
-    document.getElementById('adminDashboard').style.display = 'block';
-    document.getElementById('loginError').style.display = 'none';
-    renderAdminTable();
-    updateDashboardStats();
-    renderAdminCategories();
-    showToast(currentLang === 'ar' ? 'مرحباً، أسماء رجب!' : 'Welcome, Asma Ragab!', 'success');
-  } else {
-    document.getElementById('loginError').style.display = 'flex';
+  if (!supabase) {
+    loginError.style.display = 'flex';
+    loginError.querySelector('span:last-child').textContent = 'Supabase client is not available.';
+    return;
   }
+
+  loginError.style.display = 'none';
+  submitBtn.disabled = true;
+  submitBtn.textContent = currentLang === 'ar' ? 'جارٍ تسجيل الدخول...' : 'Signing In...';
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = currentLang === 'ar' ? 'تسجيل الدخول' : 'Sign In';
+
+  if (error) {
+    loginError.style.display = 'flex';
+    loginError.querySelector('span:last-child').textContent = error.message || (currentLang === 'ar' ? 'تعذر تسجيل الدخول' : 'Could not sign in');
+    return;
+  }
+
+  document.getElementById('loginPassword').value = '';
+  showToast(currentLang === 'ar' ? 'تم تسجيل الدخول بنجاح' : 'Signed in successfully', 'success');
 }
 
-function handleLogout() {
-  isAdminLoggedIn = false;
-  document.getElementById('adminLogin').style.display = 'flex';
-  document.getElementById('adminDashboard').style.display = 'none';
-  document.getElementById('loginUsername').value = '';
+async function handleLogout() {
+  if (!supabase) return;
+
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    showToast(error.message || (currentLang === 'ar' ? 'تعذر تسجيل الخروج' : 'Could not log out'), 'error');
+    return;
+  }
+
+  document.getElementById('loginEmail').value = '';
   document.getElementById('loginPassword').value = '';
   showToast(currentLang === 'ar' ? 'تم تسجيل الخروج' : 'Logged out', 'info');
 }
@@ -1173,6 +1406,69 @@ function updateDashboardStats() {
 }
 
 // ----- BOOK FORM (CRUD) -----
+function updatePdfFormState() {
+  const currentState = document.getElementById('pdfCurrentState');
+  const clearBtn = document.getElementById('clearPdfBtn');
+  const pdfUrlInput = document.getElementById('bookPdfUrl');
+  const editId = parseInt(document.getElementById('editBookId').value, 10);
+  const existingBook = books.find(b => b.id === editId);
+
+  if (!existingBook?.pdfData) {
+    currentState.style.display = 'none';
+    currentState.textContent = '';
+    clearBtn.style.display = 'none';
+    return;
+  }
+
+  if (pendingPdfFile) {
+    currentState.style.display = 'block';
+    currentState.textContent = currentLang === 'ar'
+      ? 'سيتم استبدال ملف PDF الحالي بالملف الجديد عند الحفظ.'
+      : 'The current PDF will be replaced by the new upload when you save.';
+    clearBtn.style.display = 'none';
+    return;
+  }
+
+  if (removeExistingPdf) {
+    currentState.style.display = 'block';
+    currentState.textContent = currentLang === 'ar'
+      ? 'سيتم حذف ملف PDF الحالي عند الحفظ.'
+      : 'The current PDF will be removed when you save.';
+    clearBtn.style.display = 'none';
+    return;
+  }
+
+  if (pdfUrlInput.value.trim()) {
+    currentState.style.display = 'block';
+    currentState.textContent = currentLang === 'ar'
+      ? 'سيتم استخدام رابط PDF الجديد عند الحفظ.'
+      : 'The new PDF URL will be used when you save.';
+    clearBtn.style.display = 'block';
+    return;
+  }
+
+  currentState.style.display = 'block';
+  currentState.textContent = currentLang === 'ar'
+    ? 'سيبقى ملف PDF الحالي مرتبطاً بهذا الكتاب ما لم تستبدله أو تحذفه.'
+    : 'The current PDF will stay attached to this book unless you replace or remove it.';
+  clearBtn.style.display = 'block';
+}
+
+function markPdfForRemoval() {
+  const editId = parseInt(document.getElementById('editBookId').value, 10);
+  if (!editId) return;
+
+  removeExistingPdf = true;
+  pendingPdfFile = null;
+  pendingPdfDataUrl = null;
+  document.getElementById('bookPdfFile').value = '';
+  document.getElementById('bookPdfUrl').value = '';
+  document.getElementById('pdfFileInfo').style.display = 'none';
+  document.getElementById('pdfDropZone').style.display = 'flex';
+  updatePdfFormState();
+  showToast(currentLang === 'ar' ? 'سيتم حذف ملف PDF عند الحفظ' : 'The PDF will be removed when you save', 'info');
+}
+
 function openBookForm(editId) {
   editId = editId || null;
   const modal = document.getElementById('bookFormModal');
@@ -1180,10 +1476,14 @@ function openBookForm(editId) {
 
   pendingPdfFile = null;
   pendingPdfDataUrl = null;
+  removeExistingPdf = false;
   document.getElementById('bookPdfFile').value = '';
   document.getElementById('pdfFileInfo').style.display = 'none';
   document.getElementById('pdfDropZone').style.display = 'flex';
   document.getElementById('pdfDropText').textContent = 'Drag & drop a PDF here, or click to browse';
+  document.getElementById('pdfCurrentState').style.display = 'none';
+  document.getElementById('clearPdfBtn').style.display = 'none';
+  document.getElementById('bookPdfUrl').value = '';
 
   if (editId) {
     const book = books.find(b => b.id === editId);
@@ -1207,12 +1507,16 @@ function openBookForm(editId) {
     document.getElementById('bookAuthorDescAr').value = book.authorDescAr || '';
 
     if (book.pdfData) {
-      document.getElementById('pdfDropText').textContent = 'Current PDF will be kept. Upload new to replace.';
-      // If pdfData is a URL, populate the URL field
+      document.getElementById('pdfDropText').textContent = 'Current PDF will be kept. Upload a new file to replace it.';
       if (book.pdfData.startsWith('http://') || book.pdfData.startsWith('https://')) {
-        document.getElementById('bookPdfUrl').value = book.pdfData;
+        if (isSupabaseStorageUrl(book.pdfData)) {
+          document.getElementById('bookPdfUrl').value = '';
+        } else {
+          document.getElementById('bookPdfUrl').value = book.pdfData;
+        }
       }
     }
+    updatePdfFormState();
   } else {
     document.getElementById('formTitle').textContent = isAr ? 'إضافة كتاب جديد' : 'Add New Book';
     document.getElementById('formSubmit').textContent = isAr ? 'إضافة كتاب' : 'Add Book';
@@ -1231,12 +1535,15 @@ function closeBookForm() {
   document.body.style.overflow = '';
   pendingPdfFile = null;
   pendingPdfDataUrl = null;
+  removeExistingPdf = false;
 }
 
 async function handleBookSubmit(e) {
   e.preventDefault();
   const editId = document.getElementById('editBookId').value;
   const isAr = currentLang === 'ar';
+  const submitBtn = document.getElementById('formSubmit');
+  const pdfUrl = document.getElementById('bookPdfUrl').value.trim();
 
   const bookData = {
     titleEn: document.getElementById('bookTitleEn').value,
@@ -1255,66 +1562,71 @@ async function handleBookSubmit(e) {
     authorDescAr: document.getElementById('bookAuthorDescAr').value || '',
     content: [{ titleEn: "Chapter 1", titleAr: "الفصل الأول", textEn: "Content available as PDF. Please click Read to open the full book.", textAr: "المحتوى متاح كـ PDF. انقر على اقرأ لفتح الكتاب الكامل." }]
   };
+  submitBtn.disabled = true;
+  submitBtn.textContent = isAr ? 'جارٍ الحفظ...' : 'Saving...';
 
-  if (editId) {
-    const idx = books.findIndex(b => b.id === parseInt(editId));
-    if (idx > -1) {
-      bookData.id = parseInt(editId);
-      bookData.content = books[idx].content;
-      // Keep existing PDF unless new one uploaded or URL provided
-      const pdfUrl = document.getElementById('bookPdfUrl').value.trim();
-      if (pdfUrl) {
+  try {
+    let savedBook;
+    let existingBook = null;
+
+    if (editId) {
+      const numericId = parseInt(editId, 10);
+      const idx = books.findIndex(b => b.id === numericId);
+      if (idx === -1) throw new Error('Book not found.');
+
+      existingBook = books[idx];
+      const replacingStoredPdfWithUrl = !!pdfUrl && existingBook.storagePath && pdfUrl !== existingBook.pdfData;
+      bookData.id = numericId;
+      bookData.content = existingBook.content;
+      bookData.storagePath = existingBook.storagePath || null;
+
+      if (pendingPdfFile) {
+        bookData.pdfData = existingBook.pdfData;
+      } else if (pdfUrl) {
         bookData.pdfData = pdfUrl;
+        bookData.storagePath = null;
+      } else if (removeExistingPdf) {
+        bookData.pdfData = null;
+        bookData.storagePath = null;
       } else {
-        bookData.pdfData = pendingPdfDataUrl || books[idx].pdfData;
+        bookData.pdfData = existingBook.pdfData;
       }
 
-      try {
-        const savedBook = await updateBookInSupabase(bookData.id, bookData);
-        books[idx] = savedBook || bookData;
-        showToast(isAr ? 'تم تحديث الكتاب في Supabase' : 'Book updated in Supabase', 'success');
-      } catch (err) {
-        console.error('Supabase update error:', err);
-        books[idx] = bookData;
-        showToast(
-          isAr
-            ? 'تم حفظ التعديل محلياً فقط. تحقق من سياسات Supabase أو أضف رابط PDF مباشر.'
-            : 'Book saved locally only. Check Supabase write policies or provide a hosted PDF URL.',
-          'info'
-        );
+      savedBook = await updateBookInSupabase(numericId, bookData);
+
+      if (pendingPdfFile) {
+        const uploadResult = await uploadPdfToSupabase(numericId, pendingPdfFile);
+        savedBook = await syncBookPdfInSupabase(numericId, uploadResult.pdfUrl, uploadResult.storagePath);
+      } else if (existingBook.storagePath && (removeExistingPdf || replacingStoredPdfWithUrl)) {
+        await deletePdfFromSupabase(existingBook.storagePath);
       }
-    }
-  } else {
-    const pdfUrl = document.getElementById('bookPdfUrl').value.trim();
-    if (pdfUrl) {
-      bookData.pdfData = pdfUrl;
+
+      books[idx] = savedBook || bookData;
+      showToast(isAr ? 'تم تحديث الكتاب' : 'Book updated', 'success');
     } else {
-      bookData.pdfData = pendingPdfDataUrl || null;
-    }
+      bookData.pdfData = pdfUrl || null;
+      savedBook = await createBookInSupabase(bookData);
+      if (!savedBook) throw new Error('Book record was not returned from Supabase.');
 
-    try {
-      const savedBook = await createBookInSupabase(bookData);
-      if (savedBook) {
-        books.push(savedBook);
-      } else {
-        bookData.id = Date.now();
-        books.push(bookData);
+      if (pendingPdfFile) {
+        const uploadResult = await uploadPdfToSupabase(savedBook.id, pendingPdfFile);
+        savedBook = await syncBookPdfInSupabase(savedBook.id, uploadResult.pdfUrl, uploadResult.storagePath);
       }
-      showToast(isAr ? 'تمت إضافة الكتاب إلى Supabase' : 'Book added to Supabase', 'success');
-    } catch (err) {
-      console.error('Supabase insert error:', err);
-      bookData.id = Date.now();
-      books.push(bookData);
-      showToast(
-        isAr
-          ? 'تمت إضافة الكتاب محلياً فقط. تحقق من سياسات Supabase أو أضف رابط PDF مباشر.'
-          : 'Book added locally only. Check Supabase write policies or provide a hosted PDF URL.',
-        'info'
-      );
+
+      books.push(savedBook);
+      showToast(isAr ? 'تمت إضافة الكتاب' : 'Book added', 'success');
     }
+  } catch (err) {
+    console.error('Supabase book save error:', err);
+    showToast(err.message || (isAr ? 'تعذر حفظ الكتاب في Supabase' : 'Could not save the book to Supabase'), 'error');
+    submitBtn.disabled = false;
+    submitBtn.textContent = editId ? (isAr ? 'حفظ التعديلات' : 'Save Changes') : (isAr ? 'إضافة كتاب' : 'Add Book');
+    return;
   }
 
   saveBooks();
+  submitBtn.disabled = false;
+  submitBtn.textContent = editId ? (isAr ? 'حفظ التعديلات' : 'Save Changes') : (isAr ? 'إضافة كتاب' : 'Add Book');
   // Collapse animation before closing
   const formEl = document.querySelector('#bookFormModal .modal-container');
   if (formEl) {
@@ -1338,16 +1650,16 @@ function closeDeleteModal() { document.getElementById('deleteModal').classList.r
 
 async function confirmDelete() {
   if (deleteTargetId === null) return;
+  const existingBook = books.find(b => b.id === deleteTargetId);
   try {
+    if (existingBook?.storagePath) {
+      await deletePdfFromSupabase(existingBook.storagePath);
+    }
     await deleteBookInSupabase(deleteTargetId);
   } catch (err) {
     console.error('Supabase delete error:', err);
-    showToast(
-      currentLang === 'ar'
-        ? 'تعذر حذف السجل من Supabase. سيتم حذفه محلياً فقط.'
-        : 'Could not delete from Supabase. Removing it locally only.',
-      'info'
-    );
+    showToast(err.message || (currentLang === 'ar' ? 'تعذر حذف الكتاب من Supabase' : 'Could not delete the book from Supabase'), 'error');
+    return;
   }
   books = books.filter(b => b.id !== deleteTargetId);
   favorites = favorites.filter(id => id !== deleteTargetId);
@@ -1374,19 +1686,6 @@ async function confirmDelete() {
 
 // ----- HELPERS -----
 function saveBooks() { localStorage.setItem('maktabaty_books', JSON.stringify(books)); }
-
-function loadCustomCategories() {
-  try {
-    customCategories = JSON.parse(localStorage.getItem('maktabaty_custom_categories')) || [];
-  } catch (e) {
-    customCategories = [];
-  }
-  updateFilterChips();
-}
-
-function saveCustomCategories() {
-  localStorage.setItem('maktabaty_custom_categories', JSON.stringify(customCategories));
-}
 
 // Add custom filter chips to the library filter bar dynamically
 function updateFilterChips() {
@@ -1489,7 +1788,7 @@ function updateCategoryPreview() {
   document.getElementById('catPreviewName').textContent = name;
 }
 
-function handleCategorySubmit(e) {
+async function handleCategorySubmit(e) {
   e.preventDefault();
   const nameEn = document.getElementById('catNameEn').value.trim();
   const nameAr = document.getElementById('catNameAr').value.trim();
@@ -1507,8 +1806,15 @@ function handleCategorySubmit(e) {
     return;
   }
 
-  customCategories.push({ id, icon, color, en: nameEn, ar: nameAr || nameEn });
-  saveCustomCategories();
+  try {
+    const savedCategory = await createCategoryInSupabase({ id, icon, color, en: nameEn, ar: nameAr || nameEn });
+    customCategories.push(savedCategory || { id, icon, color, en: nameEn, ar: nameAr || nameEn });
+  } catch (err) {
+    console.error('Supabase category insert error:', err);
+    showToast(err.message || (currentLang === 'ar' ? 'تعذر إضافة التصنيف في Supabase' : 'Could not add the category to Supabase'), 'error');
+    return;
+  }
+
   updateFilterChips();
   renderCategories();
   renderAdminCategories();
@@ -1539,13 +1845,24 @@ function closeDeleteCategoryModal() {
   deleteCategoryTargetId = null;
 }
 
-function confirmDeleteCategory() {
+async function confirmDeleteCategory() {
   if (!deleteCategoryTargetId) return;
-  // Move books in this category to 'other'
-  books.forEach(b => { if (b.category === deleteCategoryTargetId) b.category = 'other'; });
-  // Check if 'other' category should be added to builtins shown
+  try {
+    const reassignedBooks = await reassignBooksCategoryInSupabase(deleteCategoryTargetId, 'fiction');
+    if (reassignedBooks.length) {
+      const updatedMap = new Map(reassignedBooks.map(book => [book.id, book]));
+      books = books.map(book => updatedMap.get(book.id) || book);
+    } else {
+      books = books.map(book => book.category === deleteCategoryTargetId ? { ...book, category: 'fiction' } : book);
+    }
+    await deleteCategoryInSupabase(deleteCategoryTargetId);
+  } catch (err) {
+    console.error('Supabase category delete error:', err);
+    showToast(err.message || (currentLang === 'ar' ? 'تعذر حذف التصنيف من Supabase' : 'Could not delete the category from Supabase'), 'error');
+    return;
+  }
+
   customCategories = customCategories.filter(c => c.id !== deleteCategoryTargetId);
-  saveCustomCategories();
   saveBooks();
   updateFilterChips();
   renderBooks();
@@ -1568,9 +1885,6 @@ function confirmDeleteCategory() {
     showToast(currentLang === 'ar' ? 'تم حذف التصنيف' : 'Category deleted', 'success');
   }
 }
-
-// ----- HELPERS -----
-function saveBooks() { localStorage.setItem('maktabaty_books', JSON.stringify(books)); }
 
 function getCategoryLabel(cat) {
   const all = getAllCategories();
