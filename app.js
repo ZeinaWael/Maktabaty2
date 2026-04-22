@@ -2,7 +2,7 @@
 
 const SUPABASE_URL = 'https://unjbytljocengnbedpwr.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVuamJ5dGxqb2NlbmduYmVkcHdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3Njg1MjEsImV4cCI6MjA5MjM0NDUyMX0.2uf83L6YyWx7MUQufTU38HmmFuFhNl0YJ6fD0C2TZ-E';
-const supabase = window.supabase?.createClient
+const supabaseClient = window.supabase?.createClient
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
       auth: {
         persistSession: true,
@@ -315,10 +315,46 @@ const defaultBooks = [
 // ];
 
 // ----- STATE -----
+function safeGetStorage(key, fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value;
+  } catch (err) {
+    console.warn(`Storage read failed for "${key}"`, err);
+    return fallback;
+  }
+}
+
+function safeGetJsonStorage(key, fallback) {
+  const raw = safeGetStorage(key, null);
+  if (raw === null) return fallback;
+
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn(`Storage JSON parse failed for "${key}". Resetting stored value.`, err);
+    try {
+      localStorage.removeItem(key);
+    } catch (removeErr) {
+      console.warn(`Storage cleanup failed for "${key}"`, removeErr);
+    }
+    return fallback;
+  }
+}
+
+function safeSetStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (err) {
+    console.warn(`Storage write failed for "${key}"`, err);
+  }
+}
+
 let books = [];
-let favorites = JSON.parse(localStorage.getItem('maktabaty_favorites')) || [];
-let currentLang = localStorage.getItem('maktabaty_lang') || 'en';
-let currentTheme = localStorage.getItem('maktabaty_theme') || 'dark';
+const storedFavorites = safeGetJsonStorage('maktabaty_favorites', []);
+let favorites = Array.isArray(storedFavorites) ? storedFavorites : [];
+let currentLang = safeGetStorage('maktabaty_lang', 'en') || 'en';
+let currentTheme = safeGetStorage('maktabaty_theme', 'dark') || 'dark';
 let isAdminLoggedIn = false;
 let currentAdminUser = null;
 let currentPage = 'library';
@@ -389,8 +425,8 @@ function getPublishedPdfUrl(value) {
 }
 
 async function getSupabaseAccessToken() {
-  if (!supabase) return SUPABASE_ANON;
-  const { data, error } = await supabase.auth.getSession();
+  if (!supabaseClient) return SUPABASE_ANON;
+  const { data, error } = await supabaseClient.auth.getSession();
   if (error) throw error;
   return data?.session?.access_token || SUPABASE_ANON;
 }
@@ -638,7 +674,7 @@ async function loadCustomCategories() {
 }
 
 async function setupAdminAuth() {
-  if (!supabase) {
+  if (!supabaseClient) {
     showToast('Supabase client failed to load. Check the CDN script.', 'error');
     return;
   }
@@ -649,13 +685,13 @@ async function setupAdminAuth() {
     updateAdminAuthUI();
   };
 
-  const { data, error } = await supabase.auth.getSession();
+  const { data, error } = await supabaseClient.auth.getSession();
   if (error) {
     console.error('Supabase auth session error:', error);
   }
   applySession(data?.session || null);
 
-  supabase.auth.onAuthStateChange((_event, session) => {
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
     applySession(session);
   });
 }
@@ -709,13 +745,43 @@ function updateAdminAuthUI() {
 
 // ----- INIT -----
 document.addEventListener('DOMContentLoaded', async () => {
-  applyTheme(currentTheme);
-  applyLanguage(currentLang);
-  initParticles();
-  initEventListeners();
-  setupPdfUpload();
-  await Promise.all([loadCustomCategories(), loadBooks(), setupAdminAuth()]);
-  animateCounters();
+  try {
+    applyTheme(currentTheme);
+    applyLanguage(currentLang);
+  } catch (err) {
+    console.error('Initial theme/language setup failed:', err);
+  }
+
+  try {
+    initParticles();
+  } catch (err) {
+    console.error('Particle initialization failed:', err);
+  }
+
+  try {
+    initEventListeners();
+  } catch (err) {
+    console.error('Event listener initialization failed:', err);
+    showToast('Interactive controls failed to initialize. Check the console for details.', 'error');
+  }
+
+  try {
+    setupPdfUpload();
+  } catch (err) {
+    console.error('PDF upload setup failed:', err);
+  }
+
+  try {
+    await Promise.all([loadCustomCategories(), loadBooks(), setupAdminAuth()]);
+  } catch (err) {
+    console.error('Async startup failed:', err);
+  }
+
+  try {
+    animateCounters();
+  } catch (err) {
+    console.error('Counter animation failed:', err);
+  }
 });
 
 // ----- THEME -----
@@ -723,7 +789,7 @@ function applyTheme(theme) {
   currentTheme = theme;
   document.documentElement.setAttribute('data-theme', theme);
   document.getElementById('themeIcon').textContent = theme === 'dark' ? 'light_mode' : 'dark_mode';
-  localStorage.setItem('maktabaty_theme', theme);
+  safeSetStorage('maktabaty_theme', theme);
 }
 
 // ----- LANGUAGE -----
@@ -735,7 +801,7 @@ function applyLanguage(lang) {
   document.getElementById('langLabel').textContent = isAr ? 'EN' : 'عربي';
   document.querySelectorAll('[data-en]').forEach(el => { el.textContent = isAr ? el.dataset.ar : el.dataset.en; });
   document.querySelectorAll('[data-placeholder-en]').forEach(el => { el.placeholder = isAr ? el.dataset.placeholderAr : el.dataset.placeholderEn; });
-  localStorage.setItem('maktabaty_lang', lang);
+  safeSetStorage('maktabaty_lang', lang);
   updateAdminWelcome();
   renderBooks();
   renderCategories();
@@ -747,6 +813,10 @@ function applyLanguage(lang) {
 function initEventListeners() {
   document.getElementById('themeToggle').addEventListener('click', () => applyTheme(currentTheme === 'dark' ? 'light' : 'dark'));
   document.getElementById('langToggle').addEventListener('click', () => applyLanguage(currentLang === 'en' ? 'ar' : 'en'));
+  document.getElementById('navBrand').addEventListener('click', e => {
+    e.preventDefault();
+    switchPage('library');
+  });
 
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', e => { e.preventDefault(); switchPage(link.dataset.page); });
@@ -1019,7 +1089,7 @@ function filterByCategory(cat) {
 function toggleFavorite(bookId) {
   const idx = favorites.indexOf(bookId);
   if (idx > -1) favorites.splice(idx, 1); else favorites.push(bookId);
-  localStorage.setItem('maktabaty_favorites', JSON.stringify(favorites));
+  safeSetStorage('maktabaty_favorites', JSON.stringify(favorites));
   renderBooks();
   showToast(idx > -1 ? (currentLang === 'ar' ? 'تمت الإزالة' : 'Removed from favorites') : (currentLang === 'ar' ? 'تمت الإضافة' : 'Added to favorites'), 'success');
 }
@@ -1324,7 +1394,7 @@ async function handleLogin(e) {
   const loginError = document.getElementById('loginError');
   const submitBtn = document.querySelector('#loginForm .login-btn');
 
-  if (!supabase) {
+  if (!supabaseClient) {
     loginError.style.display = 'flex';
     loginError.querySelector('span:last-child').textContent = 'Supabase client is not available.';
     return;
@@ -1334,7 +1404,7 @@ async function handleLogin(e) {
   submitBtn.disabled = true;
   submitBtn.textContent = currentLang === 'ar' ? 'جارٍ تسجيل الدخول...' : 'Signing In...';
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
   submitBtn.disabled = false;
   submitBtn.textContent = currentLang === 'ar' ? 'تسجيل الدخول' : 'Sign In';
@@ -1350,9 +1420,9 @@ async function handleLogin(e) {
 }
 
 async function handleLogout() {
-  if (!supabase) return;
+  if (!supabaseClient) return;
 
-  const { error } = await supabase.auth.signOut();
+  const { error } = await supabaseClient.auth.signOut();
   if (error) {
     showToast(error.message || (currentLang === 'ar' ? 'تعذر تسجيل الخروج' : 'Could not log out'), 'error');
     return;
@@ -1664,7 +1734,7 @@ async function confirmDelete() {
   books = books.filter(b => b.id !== deleteTargetId);
   favorites = favorites.filter(id => id !== deleteTargetId);
   saveBooks();
-  localStorage.setItem('maktabaty_favorites', JSON.stringify(favorites));
+  safeSetStorage('maktabaty_favorites', JSON.stringify(favorites));
   // Collapse animation before closing
   const delEl = document.querySelector('#deleteModal .modal-container');
   if (delEl) {
@@ -1685,7 +1755,7 @@ async function confirmDelete() {
 }
 
 // ----- HELPERS -----
-function saveBooks() { localStorage.setItem('maktabaty_books', JSON.stringify(books)); }
+function saveBooks() { safeSetStorage('maktabaty_books', JSON.stringify(books)); }
 
 // Add custom filter chips to the library filter bar dynamically
 function updateFilterChips() {
@@ -1967,3 +2037,13 @@ function initParticles() {
   }
   animate();
 }
+
+Object.assign(window, {
+  filterByCategory,
+  openDetail,
+  openReader,
+  toggleFavorite,
+  openBookForm,
+  openDeleteModal,
+  openDeleteCategoryModal
+});
