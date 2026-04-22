@@ -1,6 +1,6 @@
 // ===== MAKTABATY - BOOK LIBRARY SYSTEM =====
 
-const SUPABASE_URL  = 'https://unjbytljocengnbedpwr.supabase.co';
+const SUPABASE_URL = 'https://unjbytljocengnbedpwr.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVuamJ5dGxqb2NlbmduYmVkcHdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3Njg1MjEsImV4cCI6MjA5MjM0NDUyMX0.2uf83L6YyWx7MUQufTU38HmmFuFhNl0YJ6fD0C2TZ-E';
 // ----- BOOK DATA -----
 const defaultBooks = [
@@ -15,12 +15,12 @@ const defaultBooks = [
     pages: 250,
     rating: 4.8,
     color: "#1a5c3a",
-    pdfData: null,
+    pdfData: "https://unjbytljocengnbedpwr.supabase.co/storage/v1/object/public/books/risalat-min-alnabi.pdf.pdf",
     wallpaper: "",
     descEn: "Spiritual reflections inspired by the life of the Prophet.",
     descAr: "تأملات روحية مستوحاة من سيرة النبي.",
-    content: [],
-    },   
+    content: []
+  },
   {
     id: 2,
     titleEn: "On the Path of Prophethood",
@@ -320,11 +320,11 @@ let customCategories = [];
 
 // Built-in categories (fixed)
 const BUILTIN_CATEGORIES = [
-  { id: 'fiction',    icon: '📖', color: '#2c5f7c', en: 'Fiction',    ar: 'روايات' },
-  { id: 'science',    icon: '🔬', color: '#4a7c59', en: 'Science',    ar: 'علوم' },
-  { id: 'history',    icon: '🏛️', color: '#8B4513', en: 'History',    ar: 'تاريخ' },
-  { id: 'poetry',     icon: '✨', color: '#8B1A3A', en: 'Poetry',     ar: 'شعر' },
-  { id: 'religion',   icon: '🕌', color: '#1a5c3a', en: 'Religion',   ar: 'دين' },
+  { id: 'fiction', icon: '📖', color: '#2c5f7c', en: 'Fiction', ar: 'روايات' },
+  { id: 'science', icon: '🔬', color: '#4a7c59', en: 'Science', ar: 'علوم' },
+  { id: 'history', icon: '🏛️', color: '#8B4513', en: 'History', ar: 'تاريخ' },
+  { id: 'poetry', icon: '✨', color: '#8B1A3A', en: 'Poetry', ar: 'شعر' },
+  { id: 'religion', icon: '🕌', color: '#1a5c3a', en: 'Religion', ar: 'دين' },
   { id: 'philosophy', icon: '💭', color: '#6b3a5d', en: 'Philosophy', ar: 'فلسفة' },
 ];
 
@@ -349,42 +349,126 @@ let pendingPdfPage = null;
 let pendingPdfFile = null;
 let pendingPdfDataUrl = null;
 
-// Load books with PDF data from localStorage
+function isRemotePdfUrl(value) {
+  return typeof value === 'string' && /^https?:\/\//i.test(value);
+}
+
+function getPublishedPdfUrl(value) {
+  return isRemotePdfUrl(value) ? value : null;
+}
+
+function getSupabaseHeaders(extraHeaders) {
+  return {
+    'apikey': SUPABASE_ANON,
+    'Authorization': `Bearer ${SUPABASE_ANON}`,
+    ...extraHeaders
+  };
+}
+
+async function supabaseRequest(path, options) {
+  const requestOptions = options || {};
+  const headers = getSupabaseHeaders(requestOptions.headers || {});
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...requestOptions,
+    headers
+  });
+
+  if (!res.ok) {
+    throw new Error(await res.text() || ('HTTP ' + res.status));
+  }
+
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+function mapSupabaseRowToBook(b) {
+  return {
+    id: b.id,
+    titleEn: b.title_en,
+    titleAr: b.title_ar || b.title_en,
+    authorEn: b.author_en,
+    authorAr: b.author_ar || b.author_en,
+    authorDescEn: b.author_desc_en || '',
+    authorDescAr: b.author_desc_ar || '',
+    category: b.category || 'fiction',
+    year: b.year || 2024,
+    pages: b.pages || 100,
+    rating: parseFloat(b.rating) || 4.0,
+    descEn: b.desc_en || 'No description available.',
+    descAr: b.desc_ar || 'لا يوجد وصف متاح.',
+    color: b.color || '#8B1A3A',
+    wallpaper: b.wallpaper || null,
+    pdfData: b.pdf_url || (b.has_pdf ? `${SUPABASE_URL}/storage/v1/object/public/books/${b.id}.pdf` : null),
+    content: [{
+      titleEn: 'Chapter 1', titleAr: 'الفصل الأول',
+      textEn: 'Open PDF to read.', textAr: 'افتح PDF للقراءة.'
+    }]
+  };
+}
+
+function mapBookToSupabaseRow(book) {
+  const publishedPdfUrl = getPublishedPdfUrl(book.pdfData);
+
+  return {
+    title_en: book.titleEn,
+    title_ar: book.titleAr,
+    author_en: book.authorEn,
+    author_ar: book.authorAr,
+    author_desc_en: book.authorDescEn || '',
+    author_desc_ar: book.authorDescAr || '',
+    category: book.category,
+    year: book.year,
+    pages: book.pages,
+    rating: book.rating,
+    desc_en: book.descEn,
+    desc_ar: book.descAr,
+    color: book.color,
+    wallpaper: book.wallpaper,
+    has_pdf: !!publishedPdfUrl,
+    pdf_url: publishedPdfUrl
+  };
+}
+
+async function createBookInSupabase(book) {
+  const rows = await supabaseRequest('books', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    },
+    body: JSON.stringify(mapBookToSupabaseRow(book))
+  });
+
+  return rows && rows[0] ? mapSupabaseRowToBook(rows[0]) : null;
+}
+
+async function updateBookInSupabase(id, book) {
+  const rows = await supabaseRequest(`books?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    },
+    body: JSON.stringify(mapBookToSupabaseRow(book))
+  });
+
+  return rows && rows[0] ? mapSupabaseRowToBook(rows[0]) : null;
+}
+
+async function deleteBookInSupabase(id) {
+  await supabaseRequest(`books?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: {
+      'Prefer': 'return=minimal'
+    }
+  });
+}
+
+// Load books from Supabase
 async function loadBooks() {
   try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/books?order=id.asc&select=*`,
-      {
-        headers: {
-          'apikey': SUPABASE_ANON,
-          'Authorization': `Bearer ${SUPABASE_ANON}`
-        }
-      }
-    );
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    books = data.map(b => ({
-      id:            b.id,
-      titleEn:       b.title_en,
-      titleAr:       b.title_ar || b.title_en,
-      authorEn:      b.author_en,
-      authorAr:      b.author_ar || b.author_en,
-      authorDescEn:  b.author_desc_en || '',
-      authorDescAr:  b.author_desc_ar || '',
-      category:      b.category || 'fiction',
-      year:          b.year || 2024,
-      pages:         b.pages || 100,
-      rating:        parseFloat(b.rating) || 4.0,
-      descEn:        b.desc_en || 'No description available.',
-      descAr:        b.desc_ar || 'لا يوجد وصف متاح.',
-      color:         b.color || '#8B1A3A',
-      wallpaper:     b.wallpaper || null,
-      pdfData:       b.has_pdf
-                       ? `${SUPABASE_URL}/storage/v1/object/public/books/${b.id}.pdf`
-                       : null,
-      content: [{ titleEn: 'Chapter 1', titleAr: 'الفصل الأول',
-                  textEn: 'Open PDF to read.', textAr: 'افتح PDF للقراءة.' }]
-    }));
+    const data = await supabaseRequest('books?order=id.asc&select=*');
+    books = Array.isArray(data) ? data.map(mapSupabaseRowToBook) : [];
   } catch (err) {
     console.error('Supabase load error:', err);
     books = [...defaultBooks]; // fallback to sample books
@@ -629,7 +713,7 @@ function handlePdfFileSelect(file) {
     document.getElementById('pdfFileName').textContent = file.name + ' (' + (file.size / 1024 / 1024).toFixed(1) + ' MB)';
     document.getElementById('pdfFileInfo').style.display = 'flex';
     document.getElementById('pdfDropZone').style.display = 'none';
-    showToast('PDF ready to upload', 'success');
+    showToast('PDF ready for local preview. Paste a hosted PDF URL to publish it on the website.', 'info');
   };
   reader.readAsDataURL(file);
 }
@@ -656,31 +740,31 @@ function renderBooks(filter) {
     const hasPdf = !!book.pdfData;
     return '<div class="book-card" style="animation-delay:' + (i * 0.05) + 's" data-id="' + book.id + '">' +
       '<button class="book-fav-btn ' + (favorites.includes(book.id) ? 'active' : '') + '" onclick="event.stopPropagation();toggleFavorite(' + book.id + ')">' +
-        '<span class="material-icons-round">' + (favorites.includes(book.id) ? 'favorite' : 'favorite_border') + '</span>' +
+      '<span class="material-icons-round">' + (favorites.includes(book.id) ? 'favorite' : 'favorite_border') + '</span>' +
       '</button>' +
       (hasPdf ? '<div class="book-pdf-badge"><span class="material-icons-round">picture_as_pdf</span>PDF</div>' : '') +
       '<div class="book-cover" style="' + (book.wallpaper ? 'background-image:linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0.15)), url(' + book.wallpaper + ');background-size:cover;background-position:center' : 'background:linear-gradient(135deg,' + book.color + ',' + adjustColor(book.color, -30) + ')') + '" onclick="openDetail(' + book.id + ')">' +
-        '<div class="book-cover-decoration"></div>' +
-        '<div class="book-cover-title">' + (isAr ? book.titleAr : book.titleEn) + '</div>' +
-        '<div class="book-cover-author">' + (isAr ? book.authorAr : book.authorEn) + '</div>' +
+      '<div class="book-cover-decoration"></div>' +
+      '<div class="book-cover-title">' + (isAr ? book.titleAr : book.titleEn) + '</div>' +
+      '<div class="book-cover-author">' + (isAr ? book.authorAr : book.authorEn) + '</div>' +
       '</div>' +
       '<div class="book-card-body" onclick="openDetail(' + book.id + ')">' +
-        '<div class="book-card-title">' + (isAr ? book.titleAr : book.titleEn) + '</div>' +
-        '<div class="book-card-author">' + (isAr ? book.authorAr : book.authorEn) + '</div>' +
-        '<div class="book-card-meta">' +
-          '<div class="book-card-rating">★ ' + book.rating + '</div>' +
-          '<span class="book-card-category">' + getCategoryLabel(book.category) + '</span>' +
-        '</div>' +
+      '<div class="book-card-title">' + (isAr ? book.titleAr : book.titleEn) + '</div>' +
+      '<div class="book-card-author">' + (isAr ? book.authorAr : book.authorEn) + '</div>' +
+      '<div class="book-card-meta">' +
+      '<div class="book-card-rating">★ ' + book.rating + '</div>' +
+      '<span class="book-card-category">' + getCategoryLabel(book.category) + '</span>' +
+      '</div>' +
       '</div>' +
       '<div class="book-card-actions">' +
-        '<button onclick="event.stopPropagation();openReader(' + book.id + ')">' +
-          '<span class="material-icons-round">menu_book</span>' + (isAr ? 'اقرأ' : 'Read') +
-        '</button>' +
-        '<button onclick="event.stopPropagation();openDetail(' + book.id + ')">' +
-          '<span class="material-icons-round">info</span>' + (isAr ? 'تفاصيل' : 'Details') +
-        '</button>' +
+      '<button onclick="event.stopPropagation();openReader(' + book.id + ')">' +
+      '<span class="material-icons-round">menu_book</span>' + (isAr ? 'اقرأ' : 'Read') +
+      '</button>' +
+      '<button onclick="event.stopPropagation();openDetail(' + book.id + ')">' +
+      '<span class="material-icons-round">info</span>' + (isAr ? 'تفاصيل' : 'Details') +
+      '</button>' +
       '</div>' +
-    '</div>';
+      '</div>';
   }).join('');
 
   updateStats();
@@ -704,7 +788,7 @@ function renderCategories() {
     return '<div class="category-card" style="animation-delay:' + (i * 0.1) + 's" onclick="filterByCategory(\'' + cat.id + '\')">' +
       '<div class="category-icon" style="background:' + cat.color + '20;color:' + cat.color + '">' + cat.icon + '</div>' +
       '<div class="category-info"><h3>' + (isAr ? cat.ar : cat.en) + '</h3><p>' + count + ' ' + (isAr ? 'كتاب' : 'books') + '</p></div>' +
-    '</div>';
+      '</div>';
   }).join('');
 }
 
@@ -737,20 +821,20 @@ function renderFavorites() {
     const hasPdf = !!book.pdfData;
     return '<div class="book-card" style="animation-delay:' + (i * 0.05) + 's">' +
       '<button class="book-fav-btn active" onclick="event.stopPropagation();toggleFavorite(' + book.id + ');renderFavorites();">' +
-        '<span class="material-icons-round">favorite</span>' +
+      '<span class="material-icons-round">favorite</span>' +
       '</button>' +
       (hasPdf ? '<div class="book-pdf-badge"><span class="material-icons-round">picture_as_pdf</span>PDF</div>' : '') +
       '<div class="book-cover" style="' + (book.wallpaper ? 'background-image:linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0.15)), url(' + book.wallpaper + ');background-size:cover;background-position:center' : 'background:linear-gradient(135deg,' + book.color + ',' + adjustColor(book.color, -30) + ')') + '" onclick="openDetail(' + book.id + ')">' +
-        '<div class="book-cover-title">' + (isAr ? book.titleAr : book.titleEn) + '</div>' +
-        '<div class="book-cover-author">' + (isAr ? book.authorAr : book.authorEn) + '</div>' +
+      '<div class="book-cover-title">' + (isAr ? book.titleAr : book.titleEn) + '</div>' +
+      '<div class="book-cover-author">' + (isAr ? book.authorAr : book.authorEn) + '</div>' +
       '</div>' +
       '<div class="book-card-body" onclick="openDetail(' + book.id + ')">' +
-        '<div class="book-card-title">' + (isAr ? book.titleAr : book.titleEn) + '</div>' +
-        '<div class="book-card-author">' + (isAr ? book.authorAr : book.authorEn) + '</div>' +
-        '<div class="book-card-meta"><div class="book-card-rating">★ ' + book.rating + '</div><span class="book-card-category">' + getCategoryLabel(book.category) + '</span></div>' +
+      '<div class="book-card-title">' + (isAr ? book.titleAr : book.titleEn) + '</div>' +
+      '<div class="book-card-author">' + (isAr ? book.authorAr : book.authorEn) + '</div>' +
+      '<div class="book-card-meta"><div class="book-card-rating">★ ' + book.rating + '</div><span class="book-card-category">' + getCategoryLabel(book.category) + '</span></div>' +
       '</div>' +
       '<div class="book-card-actions"><button onclick="event.stopPropagation();openReader(' + book.id + ')"><span class="material-icons-round">menu_book</span>' + (isAr ? 'اقرأ' : 'Read') + '</button></div>' +
-    '</div>';
+      '</div>';
   }).join('');
 }
 
@@ -766,8 +850,8 @@ function handleSearch(e) {
   );
   results.innerHTML = matches.map(b =>
     '<div class="search-result-item" onclick="document.getElementById(\'searchOverlay\').classList.remove(\'active\');openDetail(' + b.id + ')">' +
-      '<div class="search-result-cover" style="background:' + b.color + '">' + (isAr ? b.titleAr : b.titleEn).charAt(0) + '</div>' +
-      '<div class="search-result-info"><h4>' + (isAr ? b.titleAr : b.titleEn) + '</h4><p>' + (isAr ? b.authorAr : b.authorEn) + (b.pdfData ? ' · PDF' : '') + '</p></div>' +
+    '<div class="search-result-cover" style="background:' + b.color + '">' + (isAr ? b.titleAr : b.titleEn).charAt(0) + '</div>' +
+    '<div class="search-result-info"><h4>' + (isAr ? b.titleAr : b.titleEn) + '</h4><p>' + (isAr ? b.authorAr : b.authorEn) + (b.pdfData ? ' · PDF' : '') + '</p></div>' +
     '</div>'
   ).join('') || '<div style="padding:20px;text-align:center;color:var(--text-muted)">' + (isAr ? 'لا توجد نتائج' : 'No results found') + '</div>';
 }
@@ -799,7 +883,7 @@ function openDetail(bookId) {
   document.getElementById('detailPages').textContent = book.pages + ' ' + (isAr ? 'صفحة' : 'pages');
   document.getElementById('detailLang').textContent = isAr ? 'عربي / إنجليزي' : 'Arabic / English';
   document.getElementById('detailReadBtn').dataset.bookId = bookId;
-  
+
   const pdfBadge = document.getElementById('detailPdfBadge');
   if (book.pdfData) {
     pdfBadge.style.display = 'flex';
@@ -807,7 +891,7 @@ function openDetail(bookId) {
   } else {
     pdfBadge.style.display = 'none';
   }
-  
+
   updateDetailFavIcon(bookId);
   document.getElementById('bookDetailModal').classList.add('active');
   document.body.style.overflow = 'hidden';
@@ -872,13 +956,13 @@ function renderTextChapter() {
 
   document.getElementById('readerPage').innerHTML =
     '<div class="reader-chapter-header">' +
-      '<span class="reader-chapter-number">' + chapterLabel + ' ' + (currentChapter + 1) + '</span>' +
-      '<h2 class="chapter-title">' + title + '</h2>' +
-      '<div class="reader-ornament">✦ ✦ ✦</div>' +
+    '<span class="reader-chapter-number">' + chapterLabel + ' ' + (currentChapter + 1) + '</span>' +
+    '<h2 class="chapter-title">' + title + '</h2>' +
+    '<div class="reader-ornament">✦ ✦ ✦</div>' +
     '</div>' +
     paragraphs.map((p, i) => '<p class="' + (i === 0 ? 'drop-cap' : '') + '">' + p + '</p>').join('') +
     '<div class="reader-chapter-footer">' +
-      '<div class="reader-ornament">— ✦ —</div>' +
+    '<div class="reader-ornament">— ✦ —</div>' +
     '</div>';
 
   document.getElementById('pageIndicator').textContent = (currentChapter + 1) + ' / ' + total;
@@ -1060,19 +1144,19 @@ function renderAdminTable(search) {
 
   tbody.innerHTML = filtered.map(book =>
     '<tr>' +
-      '<td><div class="table-cover" style="background:' + book.color + '">' + (isAr ? book.titleAr : book.titleEn).charAt(0) + '</div></td>' +
-      '<td><strong>' + (isAr ? book.titleAr : book.titleEn) + '</strong></td>' +
-      '<td>' + (isAr ? book.authorAr : book.authorEn) + '</td>' +
-      '<td><span class="book-card-category">' + getCategoryLabel(book.category) + '</span></td>' +
-      '<td><span class="pdf-status ' + (book.pdfData ? 'has-pdf' : 'no-pdf') + '">' +
-        '<span class="material-icons-round">picture_as_pdf</span>' +
-        (book.pdfData ? 'Yes' : 'No') +
-      '</span></td>' +
-      '<td>★ ' + book.rating + '</td>' +
-      '<td><div class="table-actions">' +
-        '<button class="table-action-btn" onclick="openBookForm(' + book.id + ')" title="Edit"><span class="material-icons-round">edit</span></button>' +
-        '<button class="table-action-btn delete" onclick="openDeleteModal(' + book.id + ')" title="Delete"><span class="material-icons-round">delete</span></button>' +
-      '</div></td>' +
+    '<td><div class="table-cover" style="background:' + book.color + '">' + (isAr ? book.titleAr : book.titleEn).charAt(0) + '</div></td>' +
+    '<td><strong>' + (isAr ? book.titleAr : book.titleEn) + '</strong></td>' +
+    '<td>' + (isAr ? book.authorAr : book.authorEn) + '</td>' +
+    '<td><span class="book-card-category">' + getCategoryLabel(book.category) + '</span></td>' +
+    '<td><span class="pdf-status ' + (book.pdfData ? 'has-pdf' : 'no-pdf') + '">' +
+    '<span class="material-icons-round">picture_as_pdf</span>' +
+    (book.pdfData ? 'Yes' : 'No') +
+    '</span></td>' +
+    '<td>★ ' + book.rating + '</td>' +
+    '<td><div class="table-actions">' +
+    '<button class="table-action-btn" onclick="openBookForm(' + book.id + ')" title="Edit"><span class="material-icons-round">edit</span></button>' +
+    '<button class="table-action-btn delete" onclick="openDeleteModal(' + book.id + ')" title="Delete"><span class="material-icons-round">delete</span></button>' +
+    '</div></td>' +
     '</tr>'
   ).join('');
 
@@ -1124,6 +1208,10 @@ function openBookForm(editId) {
 
     if (book.pdfData) {
       document.getElementById('pdfDropText').textContent = 'Current PDF will be kept. Upload new to replace.';
+      // If pdfData is a URL, populate the URL field
+      if (book.pdfData.startsWith('http://') || book.pdfData.startsWith('https://')) {
+        document.getElementById('bookPdfUrl').value = book.pdfData;
+      }
     }
   } else {
     document.getElementById('formTitle').textContent = isAr ? 'إضافة كتاب جديد' : 'Add New Book';
@@ -1131,6 +1219,7 @@ function openBookForm(editId) {
     document.getElementById('editBookId').value = '';
     document.getElementById('bookForm').reset();
     document.getElementById('bookColor').value = '#8B1A3A';
+    document.getElementById('bookPdfUrl').value = '';
   }
 
   modal.classList.add('active');
@@ -1144,7 +1233,7 @@ function closeBookForm() {
   pendingPdfDataUrl = null;
 }
 
-function handleBookSubmit(e) {
+async function handleBookSubmit(e) {
   e.preventDefault();
   const editId = document.getElementById('editBookId').value;
   const isAr = currentLang === 'ar';
@@ -1172,16 +1261,57 @@ function handleBookSubmit(e) {
     if (idx > -1) {
       bookData.id = parseInt(editId);
       bookData.content = books[idx].content;
-      // Keep existing PDF unless new one uploaded
-      bookData.pdfData = pendingPdfDataUrl || books[idx].pdfData;
-      books[idx] = bookData;
+      // Keep existing PDF unless new one uploaded or URL provided
+      const pdfUrl = document.getElementById('bookPdfUrl').value.trim();
+      if (pdfUrl) {
+        bookData.pdfData = pdfUrl;
+      } else {
+        bookData.pdfData = pendingPdfDataUrl || books[idx].pdfData;
+      }
+
+      try {
+        const savedBook = await updateBookInSupabase(bookData.id, bookData);
+        books[idx] = savedBook || bookData;
+        showToast(isAr ? 'تم تحديث الكتاب في Supabase' : 'Book updated in Supabase', 'success');
+      } catch (err) {
+        console.error('Supabase update error:', err);
+        books[idx] = bookData;
+        showToast(
+          isAr
+            ? 'تم حفظ التعديل محلياً فقط. تحقق من سياسات Supabase أو أضف رابط PDF مباشر.'
+            : 'Book saved locally only. Check Supabase write policies or provide a hosted PDF URL.',
+          'info'
+        );
+      }
     }
-    showToast(isAr ? 'تم تحديث الكتاب بنجاح' : 'Book updated successfully', 'success');
   } else {
-    bookData.id = Date.now();
-    bookData.pdfData = pendingPdfDataUrl || null;
-    books.push(bookData);
-    showToast(isAr ? 'تم إضافة الكتاب بنجاح' : 'Book added successfully', 'success');
+    const pdfUrl = document.getElementById('bookPdfUrl').value.trim();
+    if (pdfUrl) {
+      bookData.pdfData = pdfUrl;
+    } else {
+      bookData.pdfData = pendingPdfDataUrl || null;
+    }
+
+    try {
+      const savedBook = await createBookInSupabase(bookData);
+      if (savedBook) {
+        books.push(savedBook);
+      } else {
+        bookData.id = Date.now();
+        books.push(bookData);
+      }
+      showToast(isAr ? 'تمت إضافة الكتاب إلى Supabase' : 'Book added to Supabase', 'success');
+    } catch (err) {
+      console.error('Supabase insert error:', err);
+      bookData.id = Date.now();
+      books.push(bookData);
+      showToast(
+        isAr
+          ? 'تمت إضافة الكتاب محلياً فقط. تحقق من سياسات Supabase أو أضف رابط PDF مباشر.'
+          : 'Book added locally only. Check Supabase write policies or provide a hosted PDF URL.',
+        'info'
+      );
+    }
   }
 
   saveBooks();
@@ -1206,8 +1336,19 @@ function handleBookSubmit(e) {
 function openDeleteModal(bookId) { deleteTargetId = bookId; document.getElementById('deleteModal').classList.add('active'); }
 function closeDeleteModal() { document.getElementById('deleteModal').classList.remove('active'); deleteTargetId = null; }
 
-function confirmDelete() {
+async function confirmDelete() {
   if (deleteTargetId === null) return;
+  try {
+    await deleteBookInSupabase(deleteTargetId);
+  } catch (err) {
+    console.error('Supabase delete error:', err);
+    showToast(
+      currentLang === 'ar'
+        ? 'تعذر حذف السجل من Supabase. سيتم حذفه محلياً فقط.'
+        : 'Could not delete from Supabase. Removing it locally only.',
+      'info'
+    );
+  }
   books = books.filter(b => b.id !== deleteTargetId);
   favorites = favorites.filter(id => id !== deleteTargetId);
   saveBooks();
@@ -1237,7 +1378,7 @@ function saveBooks() { localStorage.setItem('maktabaty_books', JSON.stringify(bo
 function loadCustomCategories() {
   try {
     customCategories = JSON.parse(localStorage.getItem('maktabaty_custom_categories')) || [];
-  } catch(e) {
+  } catch (e) {
     customCategories = [];
   }
   updateFilterChips();
@@ -1305,18 +1446,18 @@ function renderAdminCategories() {
     return '<div class="admin-cat-chip ' + (isBuiltin ? 'builtin' : 'custom') + '" style="animation-delay:' + (i * 0.04) + 's">' +
       '<div class="admin-cat-chip-icon" style="background:' + cat.color + '20;color:' + cat.color + '">' + cat.icon + '</div>' +
       '<div class="admin-cat-chip-info">' +
-        '<div class="admin-cat-chip-name">' + label +
-          (isBuiltin ? '' : '<span class="admin-cat-chip-custom">Custom</span>') +
-        '</div>' +
-        '<div class="admin-cat-chip-meta">' + count + ' ' + (isAr ? 'كتاب' : 'books') + '</div>' +
+      '<div class="admin-cat-chip-name">' + label +
+      (isBuiltin ? '' : '<span class="admin-cat-chip-custom">Custom</span>') +
+      '</div>' +
+      '<div class="admin-cat-chip-meta">' + count + ' ' + (isAr ? 'كتاب' : 'books') + '</div>' +
       '</div>' +
       '<div class="admin-cat-chip-actions">' +
-        (isBuiltin
-          ? '' // built-in categories cannot be deleted
-          : '<button class="admin-cat-chip-btn" onclick="openDeleteCategoryModal(\'' + cat.id + '\')" title="Delete"><span class="material-icons-round">delete</span></button>'
-        ) +
+      (isBuiltin
+        ? '' // built-in categories cannot be deleted
+        : '<button class="admin-cat-chip-btn" onclick="openDeleteCategoryModal(\'' + cat.id + '\')" title="Delete"><span class="material-icons-round">delete</span></button>'
+      ) +
       '</div>' +
-    '</div>';
+      '</div>';
   }).join('');
 }
 
@@ -1352,8 +1493,8 @@ function handleCategorySubmit(e) {
   e.preventDefault();
   const nameEn = document.getElementById('catNameEn').value.trim();
   const nameAr = document.getElementById('catNameAr').value.trim();
-  const color  = document.getElementById('catColor').value;
-  const icon   = document.querySelector('.icon-pick.active')?.dataset.icon || '📚';
+  const color = document.getElementById('catColor').value;
+  const icon = document.querySelector('.icon-pick.active')?.dataset.icon || '📚';
 
   if (!nameEn) { showToast('Please enter a category name', 'error'); return; }
 
@@ -1439,13 +1580,13 @@ function getCategoryLabel(cat) {
 }
 
 function adjustColor(hex, amount) {
-  let r = parseInt(hex.slice(1,3), 16) + amount;
-  let g = parseInt(hex.slice(3,5), 16) + amount;
-  let b = parseInt(hex.slice(5,7), 16) + amount;
+  let r = parseInt(hex.slice(1, 3), 16) + amount;
+  let g = parseInt(hex.slice(3, 5), 16) + amount;
+  let b = parseInt(hex.slice(5, 7), 16) + amount;
   r = Math.max(0, Math.min(255, r));
   g = Math.max(0, Math.min(255, g));
   b = Math.max(0, Math.min(255, b));
-  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
 }
 
 function updateStats() {
