@@ -1,11 +1,12 @@
 // ============================================================
 //  SUPABASE CONFIGURATION  — maktabaty
-//  Replace the values below with your actual project credentials
-//  from https://supabase.com → Project Settings → API
+//  Legacy helper module kept for reference.
+//  The live app now uses `app.js` + `@supabase/supabase-js`
+//  for real email/password auth and authenticated writes.
 // ============================================================
 
-const SUPABASE_URL  = 'https://YOUR_PROJECT_ID.supabase.co';
-const SUPABASE_ANON = 'YOUR_ANON_PUBLIC_KEY';
+const SUPABASE_URL  = 'https://unjbytljocengnbedpwr.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVuamJ5dGxqb2NlbmduYmVkcHdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3Njg1MjEsImV4cCI6MjA5MjM0NDUyMX0.2uf83L6YyWx7MUQufTU38HmmFuFhNl0YJ6fD0C2TZ-E';
 
 // ---- Supabase REST helpers (no extra library needed) --------
 
